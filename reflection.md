@@ -29,18 +29,17 @@ I reproduced these directly by calling the functions as currently written in `ap
 
 ## 2. How did you use AI as a teammate?
 
-- Which AI tools did you use on this project (for example: ChatGPT, Gemini, Copilot)?
-- Give one example of an AI suggestion that was correct (including what the AI suggested and how you verified the result).
-- Give one example of an AI suggestion that was incorrect or misleading (including what the AI suggested and how you verified the result).
+I used **Claude Code** (Anthropic's AI coding assistant, running in my editor) as the primary AI teammate for this project, working file-by-file across `app.py`, `logic_utils.py`, and `tests/test_game_logic.py`.
+
+**Correct suggestion:** After I marked the secret-stringification bug with a `# FIXME` comment in `app.py`, I asked the AI to trace where `check_guess`'s `TypeError` fallback branch was actually being exercised. It correctly identified that the `try/except TypeError` block in the original `check_guess` only existed to paper over `app.py` sometimes passing a stringified secret — and that the *real* fix was to stop stringifying the secret at the call site in `app.py`, not to keep patching `check_guess` to tolerate mixed types. I verified this was correct two ways: (1) I wrote a regression test, `test_low_guess_against_larger_secret_is_never_too_high`, asserting `check_guess(9, 50) == "Too Low"` — before the fix this case produced `"Too High"` because `"9" > "50"` is `True` as a string comparison; after the fix it passes; (2) I ran `streamlit run app.py` and confirmed the app starts without errors and the "Attempts left"/win logic no longer depends on attempt parity.
+
+**Incorrect/misleading suggestion:** My first instinct (and the AI's first suggested approach) was to "just move `check_guess` into `logic_utils.py` unchanged" as part of the refactor step. That looked reasonable, but running `pytest` against the *starter* tests immediately showed it was wrong: the starter tests assert `check_guess(50, 50) == "Win"` (a plain string), while the original `app.py` version of `check_guess` returns a **tuple** `("Win", "🎉 Correct!")`. A tuple is never `== "Win"`, so a literal "just move it" refactor would have kept every starter test failing, just with a different error message than the `NotImplementedError` we started with. I caught this by actually running `pytest tests/ -v` and reading the failure instead of assuming the move was done once the import worked. The real fix was to split the function: `check_guess` now returns only the outcome string (matching what the tests expect), and a new `get_hint_message(outcome)` function separately maps the outcome to its display text — which is also where the swapped hint-text bug got fixed.
 
 ---
 
 ## 3. Debugging and testing your fixes
 
-- How did you decide whether a bug was really fixed?
-- Describe at least one test you ran (manual or using pytest)  
-  and what it showed you about your code.
-- Did AI help you design or understand any tests? How?
+I treated "fixed" as meaning three things had to all be true at once: the specific regression test for that bug passes, the full `pytest` suite still passes (so the fix didn't break anything else), and the live Streamlit app starts and behaves sanely for that scenario. Before any fix, `pytest tests/ -v` failed all 3 starter tests with `NotImplementedError` (the stub functions in `logic_utils.py` hadn't been implemented yet). After refactoring the real logic into `logic_utils.py` and fixing the two targeted bugs, I re-ran `pytest tests/ -v` and got `6 passed in 0.01s` — the 3 original starter tests plus 3 new regression tests I added (`test_too_high_hint_tells_player_to_go_lower`, `test_too_low_hint_tells_player_to_go_higher`, `test_low_guess_against_larger_secret_is_never_too_high`). I also started the app with `streamlit run app.py --server.headless true` and confirmed with `curl` that it returns `HTTP 200` with no traceback in the server log, which told me the import refactor (`from logic_utils import ...`) didn't break anything at the app level, not just at the unit-test level. The AI helped design the regression tests by pointing at the exact `check_guess`/`get_hint_message` output that was wrong *before* the fix (e.g., `check_guess(9, 50)` returning `"Too High"` instead of `"Too Low"`), so each new test directly encodes "this specific wrong output must never come back" rather than testing something vague.
 
 ---
 
