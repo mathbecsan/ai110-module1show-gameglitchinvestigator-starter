@@ -45,13 +45,14 @@ I treated "fixed" as meaning three things had to all be true at once: the specif
 
 ## 4. What did you learn about Streamlit and state?
 
-- How would you explain Streamlit "reruns" and session state to a friend who has never used Streamlit?
+Streamlit doesn't work like a normal app that keeps running in the background waiting for the next click — instead, every single time you interact with a widget (click a button, type in a text box, check a checkbox), Streamlit throws away the current run and **re-executes your entire script from top to bottom**. That's the "rerun" model. Because of that, any plain Python variable would just reset to its initial value on every click — which is exactly why `st.session_state` exists: it's a dictionary-like object that Streamlit keeps alive *across* reruns, so things like the secret number, the attempt count, and the score can persist while the rest of the script re-runs fresh each time. This project made that concrete: the "New Game" bug happened precisely because one piece of state (`status`) was left out of the reset, so on the very next rerun the script re-read that stale value from `session_state` and immediately hit the `st.stop()` branch — a good reminder that in Streamlit, "did I update session_state" matters more than "did I update a local variable."
 
 ---
 
 ## 5. Looking ahead: your developer habits
 
-- What is one habit or strategy from this project that you want to reuse in future labs or projects?
-  - This could be a testing habit, a prompting strategy, or a way you used Git.
-- What is one thing you would do differently next time you work with AI on a coding task?
-- In one or two sentences, describe how this project changed the way you think about AI generated code.
+One habit I want to keep: **write a regression test that encodes the actual wrong output you saw**, not just a generic "does this function work" test. For example, `check_guess(9, 50)` really did return `"Too High"` before the fix — turning that exact case into a permanent test is a much stronger guardrail than a vague assertion, because it will fail loudly if the old bug's root cause (mixed int/str comparisons) ever creeps back in.
+
+One thing I'd do differently next time: verify a refactor against the *existing* test suite before trusting that "the code compiles/imports" means "the code is correct." My first pass at moving `check_guess` into `logic_utils.py` kept its original tuple return type, which looked fine until I actually ran `pytest` and saw it still failed the starter tests for a completely different reason than before. Running the tests earlier in the process, not just at the end, would have caught that mismatch sooner.
+
+This project changed how I think about AI-generated code mainly around **trusting output type/shape without checking call sites**. The starter `check_guess` and the starter tests were both "AI-generated" but disagreed with each other about what the function should return — a subtle inconsistency that's easy to miss just by reading either file in isolation, but obvious the moment you actually run the test suite. It reinforced that "the code looks reasonable" and "the code is correct" are different claims, and only running it (tests, then the live app) closes that gap.
